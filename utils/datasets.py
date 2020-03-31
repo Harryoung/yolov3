@@ -276,7 +276,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.hyp = hyp
         self.image_weights = image_weights
         self.rect = False if image_weights else rect
-        self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
+        self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training) 这是啥操作
 
         # Define labels
         self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
@@ -319,7 +319,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.imgs = [None] * n
         self.labels = [None] * n
         if cache_labels or image_weights:  # cache labels for faster training
-            self.labels = [np.zeros((0, 5))] * n
+            self.labels = [np.zeros((0, 5))] * n # 0行5列，这种初始化使得下面的labels[i]=l可以顺利实现
             extract_bounding_boxes = False
             create_datasubset = False
             pbar = tqdm(self.label_files, desc='Caching labels')
@@ -340,7 +340,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                         nd += 1  # print('WARNING: duplicate rows in %s' % self.label_files[i])  # duplicate rows
                     if single_cls:
                         l[:, 0] = 0  # force dataset into single-class mode
-                    self.labels[i] = l
+                    self.labels[i] = l # 注意这是字母l!不是数字1！
                     nf += 1  # file found
 
                     # Create subdataset (a smaller dataset)
@@ -356,7 +356,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                                 f.write(self.img_files[i] + '\n')
 
                     # Extract object detection boxes for a second stage classifier
-                    if extract_bounding_boxes:
+                    if extract_bounding_boxes:# 哦，这原来是对每一个标签box都截取出原图的正方形子图啊
                         p = Path(self.img_files[i])
                         img = cv2.imread(str(p))
                         h, w = img.shape[:2]
@@ -367,7 +367,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
                             b = x[1:] * [w, h, w, h]  # box
                             b[2:] = b[2:].max()  # rectangle to square
-                            b[2:] = b[2:] * 1.3 + 30  # pad
+                            b[2:] = b[2:] * 1.3 + 30  # pad 
                             b = xywh2xyxy(b.reshape(-1, 4)).ravel().astype(np.int)
 
                             b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
@@ -614,7 +614,7 @@ def letterbox(img, new_shape=(416, 416), color=(128, 128, 128),
     new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
     if auto:  # minimum rectangle
-        dw, dh = np.mod(dw, 32), np.mod(dh, 32)  # wh padding
+        dw, dh = np.mod(dw, 32), np.mod(dh, 32)  # wh padding mod求余数
     elif scaleFill:  # stretch
         dw, dh = 0.0, 0.0
         new_unpad = new_shape
@@ -625,7 +625,7 @@ def letterbox(img, new_shape=(416, 416), color=(128, 128, 128),
 
     if shape[::-1] != new_unpad:  # resize
         img = cv2.resize(img, new_unpad, interpolation=interp)  # INTER_AREA is better, INTER_LINEAR is faster
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1)) # 因为dh/=2有可能是几点五，所以这样加减0.1来分配这奇数个padding
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
     return img, ratio, (dw, dh)
@@ -658,7 +658,7 @@ def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10,
     S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # y shear (deg)
 
     # Combined rotation matrix
-    M = S @ T @ R  # ORDER IS IMPORTANT HERE!!
+    M = S @ T @ R  # ORDER IS IMPORTANT HERE!! # here @ is an operater that performs matrix multiplication
     changed = (border != 0) or (M != np.eye(3)).any()
     if changed:
         img = cv2.warpAffine(img, M[:2], dsize=(width, height), flags=cv2.INTER_AREA, borderValue=(128, 128, 128))

@@ -275,7 +275,7 @@ class Darknet(nn.Module):
                     # print(''), [print(out[i].shape) for i in layers], print(x.shape)
             elif mtype == 'yolo':
                 yolo_out.append(module(x, img_size, out))
-            out.append(x if i in self.routs else [])
+            out.append(x if i in self.routs else []) # 这个rout的使用避免了out存储不必要的中间结果
             if verbose:
                 print('%g/%g %s -' % (i, len(self.module_list), mtype), list(x.shape), str)
                 str = ''

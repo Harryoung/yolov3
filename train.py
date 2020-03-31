@@ -1,6 +1,6 @@
 import argparse
 
-import torch.distributed as dist
+import torch.distributed as dist  # 分布式训练
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 
@@ -22,21 +22,21 @@ results_file = 'results.txt'
 
 # Hyperparameters (results68: 59.9 mAP@0.5 yolov3-spp-416) https://github.com/ultralytics/yolov3/issues/310
 
-hyp = {'giou': 3.54,  # giou loss gain
-       'cls': 37.4,  # cls loss gain
-       'cls_pw': 1.0,  # cls BCELoss positive_weight
-       'obj': 64.3,  # obj loss gain (*=img_size/320 if img_size != 320)
+hyp = {'giou': 3.54,  # giou loss gain, 为啥取这个值 哦哦，可能是evolve来的！！！
+       'cls': 37.4,  # cls loss gain, 为啥取这个值
+       'cls_pw': 1.0,  # cls BCELoss positive_weight ，这是个啥  It's possible to trade off recall and precision by adding weights to positive examples. 用在BCEWithLogitsLoss中
+       'obj': 64.3,  # obj loss gain (*=img_size/320 if img_size != 320), 为啥取这个值，为啥与img_size成正比
        'obj_pw': 1.0,  # obj BCELoss positive_weight
        'iou_t': 0.225,  # iou training threshold
        'lr0': 0.01,  # initial learning rate (SGD=5E-3, Adam=5E-4)
        'lrf': -4.,  # final LambdaLR learning rate = lr0 * (10 ** lrf)
        'momentum': 0.937,  # SGD momentum
        'weight_decay': 0.000484,  # optimizer weight decay
-       'fl_gamma': 1.5,  # focal loss gamma
+       'fl_gamma': 1.5,  # focal loss gamma， 啊， Focal Loss
        'hsv_h': 0.0138,  # image HSV-Hue augmentation (fraction)
        'hsv_s': 0.678,  # image HSV-Saturation augmentation (fraction)
        'hsv_v': 0.36,  # image HSV-Value augmentation (fraction)
-       'degrees': 1.98 * 0,  # image rotation (+/- deg)
+       'degrees': 1.98 * 0,  # image rotation (+/- deg)，为啥乘了个零
        'translate': 0.05 * 0,  # image translation (+/- fraction)
        'scale': 0.05 * 0,  # image scale (+/- gain)
        'shear': 0.641 * 0}  # image shear (+/- deg)
@@ -79,7 +79,7 @@ def train():
     # Initialize model
     model = Darknet(cfg, arc=opt.arc).to(device)
 
-    # Optimizer
+    # Optimizer 这里分组优化的模式值得收藏
     pg0, pg1, pg2 = [], [], []  # optimizer parameter groups
     for k, v in dict(model.named_parameters()).items():
         if '.bias' in k:
@@ -113,7 +113,7 @@ def train():
         except KeyError as e:
             s = "%s is not compatible with %s. Specify --weights '' or specify a --cfg compatible with %s. " \
                 "See https://github.com/ultralytics/yolov3/issues/657" % (opt.weights, opt.cfg, opt.weights)
-            raise KeyError(s) from e
+            raise KeyError(s) from e  # 还能这样抛异常啊
 
         # load optimizer
         if chkpt['optimizer'] is not None:
@@ -175,7 +175,7 @@ def train():
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=batch_size,
                                              num_workers=nw,
-                                             shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used
+                                             shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used， 这是因为rect=True时Sort by aspect ratio了，但是为啥呢？
                                              pin_memory=True,
                                              collate_fn=dataset.collate_fn)
 
@@ -216,11 +216,11 @@ def train():
         # Prebias
         if prebias:
             ne = 3  # number of prebias epochs
-            ps = 0.1, 0.9  # prebias settings (lr=0.1, momentum=0.9)
+            ps = 0.1, 0.9  # prebias settings (lr=0.1, momentum=0.9) 为啥这个prebias要在前3个epoch对bias设置一个较大的学习率和一个娇小的momentum？
             model.gr = 0.0  # giou loss ratio (obj_loss = 1.0)
             if epoch == ne:
                 ps = hyp['lr0'], hyp['momentum']  # normal training settings
-                model.gr = 1.0  # giou loss ratio (obj_loss = giou)
+                model.gr = 1.0  # giou loss ratio (obj_loss = giou) # 为啥前3epoch要使obj的target==1呢
                 print_model_biases(model)
                 prebias = False
 
@@ -229,7 +229,7 @@ def train():
             if optimizer.param_groups[2].get('momentum') is not None:  # for SGD but not Adam
                 optimizer.param_groups[2]['momentum'] = ps[1]
 
-        # Update image weights (optional)
+        # Update image weights (optional) # image_weights 是通过将maps得分高的类的权重降低，将得分低的权重升高，然后根据每个image的标签信息计算其权重，最后用random.choices选出符合其权重分布的新的images_list_index， 注意这个random.choices是带重复的选取。
         if dataset.image_weights:
             w = model.class_weights.cpu().numpy() * (1 - maps) ** 2  # class weights
             image_weights = labels_to_image_weights(dataset.labels, nc=nc, class_weights=w)
@@ -243,19 +243,19 @@ def train():
             imgs = imgs.to(device).float() / 255.0  # uint8 to float32, 0 - 255 to 0.0 - 1.0
             targets = targets.to(device)
 
-            # Hyperparameter Burn-in
+            # Hyperparameter Burn-in # 大概作用就是：前若干batch由于初始化权重不稳，feature map也不稳，batch_norm此时可以不记录mean_avg和mean_std
             n_burn = 200  # number of burn-in batches
             if ni <= n_burn:
                 # g = (ni / n_burn) ** 2  # gain
                 for x in model.named_modules():  # initial stats may be poor, wait to track
-                    if x[0].endswith('BatchNorm2d'):
+                    if x[0].endswith('BatchNorm2d'): # 我猜这里应该是x[1]吧！！！
                         x[1].track_running_stats = ni == n_burn
                 # for x in optimizer.param_groups:
                 #     x['lr'] = x['initial_lr'] * lf(epoch) * g  # gain rises from 0 - 1
                 #     if 'momentum' in x:
                 #         x['momentum'] = hyp['momentum'] * g
 
-            # Plot images with bounding boxes
+            # Plot images with bounding boxes # 应该就是一开始验证一下dataset的正确性
             if ni < 1:
                 f = 'train_batch%g.png' % i  # filename
                 plot_images(imgs=imgs, targets=targets, paths=paths, fname=f)
@@ -264,7 +264,7 @@ def train():
 
             # Multi-Scale training
             if opt.multi_scale:
-                if ni / accumulate % 1 == 0:  #  adjust img_size (67% - 150%) every 1 batch
+                if ni / accumulate % 1 == 0:  #  adjust img_size (67% - 150%) every 1 batch # 应该是every effective batch
                     img_size = random.randrange(img_sz_min, img_sz_max + 1) * 32
                 sf = img_size / max(imgs.shape[2:])  # scale factor
                 if sf != 1:
@@ -281,7 +281,7 @@ def train():
                 return results
 
             # Scale loss by nominal batch_size of 64
-            loss *= batch_size / 64
+            loss *= batch_size / 64 # 应该是loss /= accumulate吧？
 
             # Compute gradient
             if mixed_precision:
@@ -330,8 +330,9 @@ def train():
         # Write Tensorboard results
         if tb_writer:
             x = list(mloss) + list(results)
-            titles = ['GIoU', 'Objectness', 'Classification', 'Train loss',
+            titles = ['GIoU', 'Objectness', 'Classification', 'Train loss', # 位置（box）损失，object（IOU）回归损失，分类损失，整体损失
                       'Precision', 'Recall', 'mAP', 'F1', 'val GIoU', 'val Objectness', 'val Classification']
+                      # 指定confidence(默认0.1)的精确率、召回率，mAP、mF1、验证集中的平均每个batch的位置损失、object损失、分类损失
             for xi, title in zip(x, titles):
                 tb_writer.add_scalar(title, xi, epoch)
 
@@ -353,7 +354,7 @@ def train():
                          'optimizer': None if final_epoch else optimizer.state_dict()}
 
             # Save last checkpoint
-            torch.save(chkpt, last)
+            torch.save(chkpt, last) # 原来Torch在save的时候还可以指定这种字典啊
 
             # Save best checkpoint
             if best_fitness == fi:
@@ -394,7 +395,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=300)  # 500200 batches at bs 16, 117263 COCO images = 273 epochs
     parser.add_argument('--batch-size', type=int, default=16)  # effective bs = batch_size * accumulate = 16 * 4 = 64
-    parser.add_argument('--accumulate', type=int, default=4, help='batches to accumulate before optimizing')
+    parser.add_argument('--accumulate', type=int, default=4, help='batches to accumulate before optimizing') # 这个好！可以提升有效batch_size！
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='*.cfg path')
     parser.add_argument('--data', type=str, default='data/coco2017.data', help='*.data path')
     parser.add_argument('--multi-scale', action='store_true', help='adjust (67% - 150%) img_size every 10 batches')
@@ -435,7 +436,7 @@ if __name__ == '__main__':
 
         train()  # train normally
 
-    else:  # Evolve hyperparameters (optional)
+    else:  # Evolve hyperparameters (optional) # 超参数hyp的演化
         opt.notest, opt.nosave = True, True  # only test/save final epoch
         if opt.bucket:
             os.system('gsutil cp gs://%s/evolve.txt .' % opt.bucket)  # download evolve.txt if exists

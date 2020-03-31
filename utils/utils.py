@@ -54,15 +54,15 @@ def labels_to_class_weights(labels, nc=80):
 
     weights[weights == 0] = 1  # replace empty bins with 1
     weights = 1 / weights  # number of targets per class
-    weights /= weights.sum()  # normalize
+    weights /= weights.sum()  # normalize # 调和平均数
     return torch.from_numpy(weights)
 
 
 def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
     # Produces image weights based on class mAPs
     n = len(labels)
-    class_counts = np.array([np.bincount(labels[i][:, 0].astype(np.int), minlength=nc) for i in range(n)])
-    image_weights = (class_weights.reshape(1, nc) * class_counts).sum(1)
+    class_counts = np.array([np.bincount(labels[i][:, 0].astype(np.int), minlength=nc) for i in range(n)]) # n*nc
+    image_weights = (class_weights.reshape(1, nc) * class_counts).sum(1) # n*1
     # index = random.choices(range(n), weights=image_weights, k=1)  # weight image sample
     return image_weights
 
@@ -184,7 +184,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
     unique_classes = np.unique(target_cls)
 
     # Create Precision-Recall curve and compute AP for each class
-    pr_score = 0.1  # score to evaluate P and R https://github.com/ultralytics/yolov3/issues/898
+    pr_score = 0.1  # score to evaluate P and R https://github.com/ultralytics/yolov3/issues/898 为了均衡这里应该取0.5吧。在真正test应用的时候，这个pr_score处的confidence就可以为届时的conf_thres作参考
     s = [len(unique_classes), tp.shape[1]]  # number class, number iou thresholds (i.e. 10 for mAP0.5...0.95)
     ap, p, r = np.zeros(s), np.zeros(s), np.zeros(s)
     for ci, c in enumerate(unique_classes):
@@ -250,7 +250,7 @@ def compute_ap(recall, precision):
         x = np.linspace(0, 1, 101)  # 101-point interp (COCO)
         ap = np.trapz(np.interp(x, mrec, mpre), x)  # integrate
     else:  # 'continuous'
-        i = np.where(mrec[1:] != mrec[:-1])[0]  # points where x axis (recall) changes
+        i = np.where(mrec[1:] != mrec[:-1])[0]  # points where x axis (recall) changes # 这个技巧不错！错开一位后逐个比较不就是考察变化吗！
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve
 
     return ap
@@ -338,6 +338,7 @@ def wh_iou(wh1, wh2):
 
 
 class FocalLoss(nn.Module):
+    # 哇啊哦focal loss还可以这么包装啊~~~
     # Wraps focal loss around existing loss_fcn() https://arxiv.org/pdf/1708.02002.pdf
     # i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=2.5)
     def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
@@ -346,7 +347,7 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
         self.alpha = alpha
         self.reduction = loss_fcn.reduction
-        self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+        self.loss_fcn.reduction = 'none'  # required to apply FL to each element 很重要
 
     def forward(self, input, target):
         loss = self.loss_fcn(input, target)
@@ -397,12 +398,12 @@ def compute_loss(p, targets, model):  # predictions, targets, model
         nb = len(b)
         if nb:  # number of targets
             ng += nb
-            ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
+            ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets # 这一步很吊啊，解释了前面indices的由来。从原始的包含所有位置所有anchor的prediction筛选出需要计算loss的位置、anchor
             # ps[:, 2:4] = torch.sigmoid(ps[:, 2:4])  # wh power loss (uncomment)
 
             # GIoU
             pxy = torch.sigmoid(ps[:, 0:2])  # pxy = pxy * s - (s - 1) / 2,  s = 1.5  (scale_xy)
-            pwh = torch.exp(ps[:, 2:4]).clamp(max=1E3) * anchor_vec[i]
+            pwh = torch.exp(ps[:, 2:4]).clamp(max=1E3) * anchor_vec[i] # 预测的wh值是相对于responsible的anchor的wh的比值
             pbox = torch.cat((pxy, pwh), 1)  # predicted box
             giou = bbox_iou(pbox.t(), tbox[i], x1y1x2y2=False, GIoU=True)  # giou computation
             lbox += (1.0 - giou).sum() if red == 'sum' else (1.0 - giou).mean()  # giou loss
@@ -410,30 +411,30 @@ def compute_loss(p, targets, model):  # predictions, targets, model
 
             if 'default' in arc and model.nc > 1:  # cls loss (only if multiple classes)
                 t = torch.zeros_like(ps[:, 5:]) + cn  # targets
-                t[range(nb), tcls[i]] = cp
-                lcls += BCEcls(ps[:, 5:], t)  # BCE
+                t[range(nb), tcls[i]] = cp # 貌似默认的是单标签，不知道多标签的tcls能不能直接这样用 #再思考：其实多标签完全可以转化为单标签，只需要把单条多标签record分拆为多条record即可！
+                lcls += BCEcls(ps[:, 5:], t)  # BCE # 默认只有responsible的anchor参与计算lcls损失
                 # lcls += CE(ps[:, 5:], tcls[i])  # CE
 
             # Append targets to text file
             # with open('targets.txt', 'a') as file:
             #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
 
-        if 'default' in arc:  # separate obj and cls
-            lobj += BCEobj(pi[..., 4], tobj)  # obj loss
+        if 'default' in arc:  # separate obj and cls # 感觉这个if语句不该有
+            lobj += BCEobj(pi[..., 4], tobj)  # obj loss 非responsible的anchor标签是0,与responsible的anchor权重一致，计算lobj;responsible的anchor的target值是预测的box与target box的iou!跟论文中一致！即有目标的概率（1）*IOU
 
-        elif 'BCE' in arc:  # unified BCE (80 classes)
+        elif 'BCE' in arc:  # unified BCE (80 classes) 非responsible的anchor也参与lcls计算
             t = torch.zeros_like(pi[..., 5:])  # targets
             if nb:
                 t[b, a, gj, gi, tcls[i]] = 1.0
-            lobj += BCE(pi[..., 5:], t)
+            lobj += BCE(pi[..., 5:], t) # 这里应该是lcls吧？
 
-        elif 'CE' in arc:  # unified CE (1 background + 80 classes)
+        elif 'CE' in arc:  # unified CE (1 background + 80 classes)非responsible的anchor也参与lcls计算
             t = torch.zeros_like(pi[..., 0], dtype=torch.long)  # targets
             if nb:
                 t[b, a, gj, gi] = tcls[i] + 1
-            lcls += CE(pi[..., 4:].view(-1, model.nc + 1), t.view(-1))
+            lcls += CE(pi[..., 4:].view(-1, model.nc + 1), t.view(-1)) # 这里岂不是obj的预测值被视为背景的概率值？不太科学啊！
 
-    lbox *= h['giou']
+    lbox *= h['giou'] # lbox其实是1-giou，跟论文说的不一致
     lobj *= h['obj']
     lcls *= h['cls']
     if red == 'sum':
@@ -448,6 +449,14 @@ def compute_loss(p, targets, model):  # predictions, targets, model
 
 
 def build_targets(model, targets):
+    # tcls: target class label [3 yolo layers * num_filtered labels]
+    # tbox: target box position, in grid unit. [3 yolo layers * num_filtered_labels * (xywh)]
+    # indices: filtered anchors' information. [3 yolo layers * num_filtered_labels * (image_index_in_batch,seleted_anchor_index,selected_anchor_y,selected_anchor_x)] 
+    # av: selected anchor in gird unit. [3 yolo layers * num_filtered_labels * (x,y)]
+    # filter的方式就是iou_threshold, 低于一定值的不计算loss，这会增加precision，减小recall。同时对于某一个label框，可以仅选择与之iou最大的anchor，也可以都选
+
+
+
     # targets = [image, class, x, y, w, h]
 
     nt = len(targets)
@@ -465,13 +474,13 @@ def build_targets(model, targets):
         t, a = targets, []
         gwh = t[:, 4:6] * ng
         if nt:
-            iou = wh_iou(anchor_vec, gwh)
+            iou = wh_iou(anchor_vec, gwh) #（na，nt）
 
             if use_all_anchors:
                 na = len(anchor_vec)  # number of anchors
                 a = torch.arange(na).view((-1, 1)).repeat([1, nt]).view(-1)
-                t = targets.repeat([na, 1])
-                gwh = gwh.repeat([na, 1])
+                t = targets.repeat([na, 1]) #(na*nt, 6)
+                gwh = gwh.repeat([na, 1]) #(na*nt, 2)
             else:  # use best anchor only
                 iou, a = iou.max(0)  # best iou and anchor
 
@@ -483,7 +492,7 @@ def build_targets(model, targets):
         # Indices
         b, c = t[:, :2].long().t()  # target image, class
         gxy = t[:, 2:4] * ng  # grid x, y
-        gi, gj = gxy.long().t()  # grid x, y indices
+        gi, gj = gxy.long().t()  # grid x, y indices #这里label框中心坐标x,y的grid单位长度被取整了
         indices.append((b, a, gj, gi))
 
         # Box
@@ -563,12 +572,12 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
         if batched:
             c = pred[:, 5] * 0 if agnostic else pred[:, 5]  # class-agnostic NMS
             boxes, scores = pred[:, :4].clone(), pred[:, 4]
-            boxes += c.view(-1, 1) * max_wh
+            boxes += c.view(-1, 1) * max_wh # 妙啊！这样就把不同类的box在空间上区分开了！这样一来在nms中不同的类的box之间就不会相互影响了！
             if method == 'vision_batch':
                 i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
             elif method == 'fast_batch':  # FastNMS from https://github.com/dbolya/yolact
                 iou = box_iou(boxes, boxes).triu_(diagonal=1)  # upper triangular iou matrix
-                i = iou.max(dim=0)[0] < iou_thres
+                i = iou.max(dim=0)[0] < iou_thres # 这个fast_nms方法简单来说就是先将box按confidence排序，然后每一个box与比其confidence大的box的iou若均小于iou_thres，则留下此box。最终得到的结果是普通nms方法的子集。
 
             output[image_i] = pred[i]
             continue
@@ -608,12 +617,12 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
             elif method == 'and':  # requires overlap, single boxes erased
                 while len(dc) > 1:
                     iou = bbox_iou(dc[0], dc[1:])  # iou with other boxes
-                    if iou.max() > 0.5:
+                    if iou.max() > 0.5: # 更严格，还要求与其它box的最大IOU大于0.5，也就是说要求至少有一个另外的box与之有较大的重叠
                         det_max.append(dc[:1])
                     dc = dc[1:][iou < iou_thres]  # remove ious > threshold
 
             elif method == 'merge':  # weighted mixture box
-                while len(dc):
+                while len(dc): # 这个更有意思，把某一个box与所有与之iou大于iou_thres的box按confidence加权平均
                     if len(dc) == 1:
                         det_max.append(dc)
                         break
@@ -624,7 +633,7 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
                     dc = dc[i == 0]
 
             elif method == 'soft':  # soft-NMS https://arxiv.org/abs/1704.04503
-                sigma = 0.5  # soft-nms sigma parameter
+                sigma = 0.5  # soft-nms sigma parameter 按照iou重新调整confidence，iou大的乘以一个小的系数，然后再按conf_thres过滤
                 while len(dc):
                     if len(dc) == 1:
                         det_max.append(dc)
@@ -949,7 +958,7 @@ def plot_images(imgs, targets, paths=None, fname='images.png'):
         boxes[[0, 2]] *= w
         boxes[[1, 3]] *= h
         plt.subplot(ns, ns, i + 1).imshow(imgs[i].transpose(1, 2, 0))
-        plt.plot(boxes[[0, 2, 2, 0, 0]], boxes[[1, 1, 3, 3, 1]], '.-')
+        plt.plot(boxes[[0, 2, 2, 0, 0]], boxes[[1, 1, 3, 3, 1]], '.-') # 还能这样批量画方框啊！
         plt.axis('off')
         if paths is not None:
             s = Path(paths[i]).name

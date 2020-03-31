@@ -18,7 +18,7 @@ def parse_model_cfg(path):
     for line in lines:
         if line.startswith('['):  # This marks the start of a new block
             mdefs.append({})
-            mdefs[-1]['type'] = line[1:-1].rstrip()
+            mdefs[-1]['type'] = line[1:-1].rstrip() # 先append一个空的，再用-1来索引，好套路
             if mdefs[-1]['type'] == 'convolutional':
                 mdefs[-1]['batch_normalize'] = 0  # pre-populate with zeros (may be overwritten later)
         else:
@@ -32,7 +32,7 @@ def parse_model_cfg(path):
             else:
                 val = val.strip()
                 if val.isnumeric():  # return int or float
-                    mdefs[-1][key] = int(val) if (int(val) - float(val)) == 0 else float(val)
+                    mdefs[-1][key] = int(val) if (int(val) - float(val)) == 0 else float(val)  # 这个技巧不错
                 else:
                     mdefs[-1][key] = val  # return string
 

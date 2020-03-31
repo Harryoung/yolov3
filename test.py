@@ -50,7 +50,7 @@ def test(cfg,
     path = data['valid']  # path to test images
     names = load_classes(data['names'])  # class names
     iouv = torch.linspace(0.5, 0.95, 10).to(device)  # iou vector for mAP@0.5:0.95
-    iouv = iouv[0].view(1)  # comment for mAP@0.5:0.95
+    iouv = iouv[0].view(1)  # comment for mAP@0.5:0.95 如果没被注释，那便是mAP@0.5
     niou = iouv.numel()
 
     # Dataloader
@@ -141,8 +141,8 @@ def test(cfg,
 
                 # Per target class
                 for cls in torch.unique(tcls_tensor):
-                    ti = (cls == tcls_tensor).nonzero().view(-1)  # prediction indices
-                    pi = (cls == pred[:, 5]).nonzero().view(-1)  # target indices
+                    ti = (cls == tcls_tensor).nonzero().view(-1)  # target indices
+                    pi = (cls == pred[:, 5]).nonzero().view(-1)  # prediction indices
 
                     # Search for detections
                     if pi.shape[0]:
@@ -166,8 +166,8 @@ def test(cfg,
     if len(stats):
         p, r, ap, f1, ap_class = ap_per_class(*stats)
         if niou > 1:
-            p, r, ap, f1 = p[:, 0], r[:, 0], ap.mean(1), ap[:, 0]  # [P, R, AP@0.5:0.95, AP@0.5]
-        mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean()
+            p, r, ap, f1 = p[:, 0], r[:, 0], ap.mean(1), ap[:, 0]  # [P, R, AP@0.5:0.95, AP@0.5] 这最后一项应该是f1吧！
+        mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean() # 不同class的mean
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
         nt = torch.zeros(1)
