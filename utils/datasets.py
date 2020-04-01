@@ -283,7 +283,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                             for x in self.img_files]
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
-        if self.rect:
+        if self.rect: # 矩形训练，要点在于同一个batch的若干image需要letterbox到同一大小，作者的做法是找到这些image中最square的一个
+                      # 然后其它的与之对齐。这就是为啥要sort by aspect ratio的原因，是为了让同一个batch的image的长宽比尽可能近似。
+                      # 这样能一定程度上能加速训练，但是batch中的image缺少了随机性，不知道会不会有负面的影响
             # Read image shapes (wh)
             sp = path.replace('.txt', '.shapes')  # shapefile path
             try:
