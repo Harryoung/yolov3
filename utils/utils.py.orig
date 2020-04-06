@@ -422,9 +422,12 @@ def compute_loss(p, targets, model):  # predictions, targets, model
         # if 'default' in arc:  # separate obj and cls # 感觉这个if语句不该有
         lobj += BCEobj(pi[..., 4], tobj)  # obj loss 非responsible的anchor标签是0,与responsible的anchor权重一致，计算lobj;responsible的anchor的target值是预测的box与target box的iou!跟论文中一致！即有目标的概率（1）*IOU
 
+<<<<<<< HEAD
         # if 'default' in arc:  # separate obj and cls # 感觉这个if语句不该有
         lobj += BCEobj(pi[..., 4], tobj)  # obj loss 非responsible的anchor标签是0,与responsible的anchor权重一致，计算lobj;responsible的anchor的target值是预测的box与target box的iou!跟论文中一致！即有目标的概率（1）*IOU
 
+=======
+>>>>>>> f48ed0ceb910fbf25c82763f278fe056cfe7428a
         if 'BCE' in arc:  # unified BCE (80 classes) 非responsible的anchor也参与lcls计算
             t = torch.zeros_like(pi[..., 5:])  # targets
             if nb:

@@ -175,7 +175,7 @@ def train():
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=batch_size,
                                              num_workers=nw,
-                                             shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used， 这是因为rect=True时Sort by aspect ratio了，但是为啥呢？
+                                             shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used， 这是因为rect=True时Sort by aspect ratio了
                                              pin_memory=True,
                                              collate_fn=dataset.collate_fn)
 
@@ -216,7 +216,7 @@ def train():
         # Prebias
         if prebias:
             ne = 3  # number of prebias epochs
-            ps = 0.1, 0.9  # prebias settings (lr=0.1, momentum=0.9) 为啥这个prebias要在前3个epoch对bias设置一个较大的学习率和一个娇小的momentum？
+            ps = 0.1, 0.9  # prebias settings (lr=0.1, momentum=0.9) 为啥这个prebias要在前3个epoch对bias设置一个较大的学习率和一个较小的momentum？
             model.gr = 0.0  # giou loss ratio (obj_loss = 1.0)
             if epoch == ne:
                 ps = hyp['lr0'], hyp['momentum']  # normal training settings
@@ -248,7 +248,7 @@ def train():
             if ni <= n_burn:
                 # g = (ni / n_burn) ** 2  # gain
                 for x in model.named_modules():  # initial stats may be poor, wait to track
-                    if x[0].endswith('BatchNorm2d'): # 我猜这里应该是x[1]吧！！！
+                    if x[0].endswith('BatchNorm2d'):
                         x[1].track_running_stats = ni == n_burn
                 # for x in optimizer.param_groups:
                 #     x['lr'] = x['initial_lr'] * lf(epoch) * g  # gain rises from 0 - 1

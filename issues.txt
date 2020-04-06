@@ -1,0 +1,5 @@
+Great work! I read the code carefully these days and really gained a lot! Thanks for your excellent work!
+By the way, I also found some problems that confused me. They are listed as blew, and I would apreciate a lot if you can explain for them. ^_^
+1. About prebias. As used in train.py, by default in first 3 epochs the lr is set relatively bigger and the momentum smaller, also the target for obj loss is set to 1 instead of giou. I guess this is for a faster convergence, but why this works? Is there any materals about that?
+2. In train.py, line 274, `loss *= batch_size / 64`, Is `loss /= accumulate` more general?
+3. In test.py ,line 189, `p, r, ap, f1 = p[:, 0], r[:, 0], ap.mean(1), ap[:, 0]  # [P, R, AP@0.5:0.95, AP@0.5]`. It is confusing to assign AP@0.5 to a variable named f1.
