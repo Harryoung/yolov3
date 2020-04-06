@@ -128,7 +128,7 @@ def train():
         start_epoch = chkpt['epoch'] + 1
         del chkpt
 
-    elif len(weights) > 0:  # darknet format
+    elif len(weights) > 0 and weights != '\'\''  and weights != ' ':  # darknet format, platform agnostic
         # possible weights are '*.weights', 'yolov3-tiny.conv.15',  'darknet53.conv.74' etc.
         load_darknet_weights(model, weights)
 
@@ -281,7 +281,7 @@ def train():
                 return results
 
             # Scale loss by nominal batch_size of 64
-            loss *= batch_size / 64 # 应该是loss /= accumulate吧？
+            loss /= accumulate # loss *= batch_size / 64 # 应该是loss /= accumulate吧？
 
             # Compute gradient
             if mixed_precision:
@@ -398,7 +398,7 @@ if __name__ == '__main__':
     parser.add_argument('--accumulate', type=int, default=4, help='batches to accumulate before optimizing') # 这个好！可以提升有效batch_size！
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='*.cfg path')
     parser.add_argument('--data', type=str, default='data/coco2017.data', help='*.data path')
-    parser.add_argument('--multi-scale', action='store_true', help='adjust (67% - 150%) img_size every 10 batches')
+    parser.add_argument('--multi-scale', action='store_true', help='adjust (67% - 150%) img_size every 10 batches')  # 从代码上看是每accumulate个batch调整一下img_size
     parser.add_argument('--img-size', nargs='+', type=int, default=[416], help='train and test image-sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', action='store_true', help='resume training from last.pt')

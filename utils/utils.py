@@ -419,14 +419,14 @@ def compute_loss(p, targets, model):  # predictions, targets, model
             # with open('targets.txt', 'a') as file:
             #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
 
-        if 'default' in arc:  # separate obj and cls # 感觉这个if语句不该有
-            lobj += BCEobj(pi[..., 4], tobj)  # obj loss 非responsible的anchor标签是0,与responsible的anchor权重一致，计算lobj;responsible的anchor的target值是预测的box与target box的iou!跟论文中一致！即有目标的概率（1）*IOU
+        # if 'default' in arc:  # separate obj and cls # 感觉这个if语句不该有
+        lobj += BCEobj(pi[..., 4], tobj)  # obj loss 非responsible的anchor标签是0,与responsible的anchor权重一致，计算lobj;responsible的anchor的target值是预测的box与target box的iou!跟论文中一致！即有目标的概率（1）*IOU
 
-        elif 'BCE' in arc:  # unified BCE (80 classes) 非responsible的anchor也参与lcls计算
+        if 'BCE' in arc:  # unified BCE (80 classes) 非responsible的anchor也参与lcls计算
             t = torch.zeros_like(pi[..., 5:])  # targets
             if nb:
                 t[b, a, gj, gi, tcls[i]] = 1.0
-            lobj += BCE(pi[..., 5:], t) # 这里应该是lcls吧？
+            lcls += BCE(pi[..., 5:], t) # 这里应该是lcls吧？
 
         elif 'CE' in arc:  # unified CE (1 background + 80 classes)非responsible的anchor也参与lcls计算
             t = torch.zeros_like(pi[..., 0], dtype=torch.long)  # targets

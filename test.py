@@ -166,7 +166,7 @@ def test(cfg,
     if len(stats):
         p, r, ap, f1, ap_class = ap_per_class(*stats)
         if niou > 1:
-            p, r, ap, f1 = p[:, 0], r[:, 0], ap.mean(1), ap[:, 0]  # [P, R, AP@0.5:0.95, AP@0.5] 这最后一项应该是f1吧！
+            p, r, ap, f1 = p[:, 0], r[:, 0], ap.mean(1), f1[:, 0]  # [P, R, AP@0.5:0.95, AP@0.5] 这最后一项应该是f1吧！
         mp, mr, map, mf1 = p.mean(), r.mean(), ap.mean(), f1.mean() # 不同class的mean
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
